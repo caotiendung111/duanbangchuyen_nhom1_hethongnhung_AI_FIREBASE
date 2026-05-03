@@ -1,6 +1,6 @@
 /*
  * =============================================================
- * PBL4 - HỆ THỐNG BĂNG CHUYỀN PHÂN LOẠI SẢN PHẨM
+ * HE THONG NHUNG - HỆ THỐNG BĂNG CHUYỀN PHÂN LOẠI SẢN PHẨM
  * Platform : ESP32 (FreeRTOS) — v4
  * =============================================================
  * THAY ĐỔI v4:
@@ -624,7 +624,7 @@ void setup() {
     Serial.begin(115200);  // Vẫn dùng Serial để debug qua USB (tuỳ chọn)
     Wire.begin(21, 22);
 
-    preferences.begin("pbl4_data", false);
+    preferences.begin("hethognhung_data", false);
     systemOn   = preferences.getBool("sysOn", false);
     isAutoMode = preferences.getBool("auto",  false);
     count1     = preferences.getInt("c1", 0);
@@ -687,7 +687,7 @@ void setup() {
     xTaskCreatePinnedToCore(vWatchdogTask,   "WDT",      2048, NULL, 3, NULL,               0);
 
     requestLCDUpdate();
-    dbg("=== PBL4 v5 WiFi TCP KHOI DONG ===");
+    dbg("=== hethognhung v5 WiFi TCP KHOI DONG ===");
 }
 
 void loop() { vTaskDelay(portMAX_DELAY); }

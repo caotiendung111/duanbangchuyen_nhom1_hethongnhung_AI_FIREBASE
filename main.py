@@ -292,7 +292,7 @@ def main():
                 display_frame = frame.copy()
 
             draw_overlay(display_frame, fps, is_frozen, connected=esp32.is_open)
-            cv2.imshow("PBL4 AI Camera", display_frame)
+            cv2.imshow("hethognhung AI Camera", display_frame)
 
             # Xử lý mất kết nối ESP32
             if not esp32.is_open:

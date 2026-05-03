@@ -224,7 +224,7 @@ def main():
                 display_frame = frame.copy()
 
             draw_overlay(display_frame, fps, is_frozen)
-            cv2.imshow("PBL4 AI Camera", display_frame)
+            cv2.imshow("hethognhung AI Camera", display_frame)
 
             # Đọc lệnh từ ESP32
             try:
