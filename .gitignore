@@ -11,3 +11,7 @@ __pycache__/
 venv/
 env/
 .env
+
+# VS Code Temp
+tempCodeRunnerFile.py
+
