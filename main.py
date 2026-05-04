@@ -1,10 +1,6 @@
 """
-he thong nhung - AI Camera Server (v6 - WiFi TCP)
+SERVER XỬ LÝ ẢNH (AI CAMERA) - HỆ THỐNG BĂNG CHUYỀN
 ====================================================
-Thay đổi so với v5:
-- Thay Serial USB → TCP Socket WiFi (port 8888)
-  ESP32 kết nối WiFi, giao tiếp với PC qua TCP
-  → ESP32 dùng nguồn cục sạc dự phòng, không cần USB
 """
 
 import cv2
@@ -12,17 +8,25 @@ import socket
 import time
 import threading
 import queue as _queue
+import firebase_admin
+from firebase_admin import credentials, db as firebase_db
 from ultralytics import YOLO
 from collections import Counter
 
 # ─── CẤU HÌNH ────────────────────────────────────────────────
-TCP_HOST    = '0.0.0.0'   # Lắng nghe tất cả interface
+TCP_HOST    = '0.0.0.0'   
 TCP_PORT    = 8888
 URL_CAMERA  = 1
 MODEL_PATH  = 'best.pt'
-NUM_FRAMES  = 8
-MIN_VALID   = 3
-CONF_THRESH = 0.75
+NUM_FRAMES  = 4
+MIN_VALID   = 2
+CONF_THRESH = 0.65
+
+# Cấu hình Firebase
+FIREBASE_DB_URL = "https://bangchuyen-a2516-default-rtdb.asia-southeast1.firebasedatabase.app"
+# Lưu ý: Bạn cần tải file serviceAccountKey.json từ Firebase Console và để cùng thư mục
+# Nếu chưa có, mình sẽ tạm dùng Firebase Database Secret của bạn (Legacy)
+FB_AUTH_TOKEN = "IbXPvjLfRZCGljcwvJo1Cgtsqyq9rhded4JpaxvU"
 
 CLASS_MAP  = {0: 'A', 1: 'B', 2: 'O', 3: 'M'}
 CLASS_NAME = {'A': 'Apple', 'B': 'Banana', 'O': 'Orange', 'M': 'Milk', 'U': 'Unknown'}
@@ -35,10 +39,30 @@ _last_result  = 'U'
 _status_msg   = "READY"
 _frozen_frame = None
 
+# Khởi tạo Firebase Python
+try:
+    # Sử dụng Database Secret (Legacy) để đơn giản cho bạn lúc này
+    options = {'databaseURL': FIREBASE_DB_URL, 'auth': {'uid': 'admin'}}
+    # Nếu bạn có file .json thì dùng credentials.Certificate("path/to/key.json")
+    # Ở đây mình giả định bạn dùng Database Secret cho nhanh
+    firebase_admin.initialize_app(options=options)
+    print("[FIREBASE] Da ket noi thanh cong!")
+except Exception as e:
+    print(f"[FIREBASE] Loi khoi tao: {e}")
+
 def set_status(msg: str):
     global _status_msg
     with _lock:
         _status_msg = msg
+    # Tạm thời tắt đồng bộ Firebase từ Python để tránh bị treo
+    # try:
+    #     firebase_db.reference('/bangchuyen/status/aiStatus').set(msg)
+    # except:
+    #     pass
+
+def get_status() -> str:
+    with _lock:
+        return _status_msg
 
 def get_status() -> str:
     with _lock:

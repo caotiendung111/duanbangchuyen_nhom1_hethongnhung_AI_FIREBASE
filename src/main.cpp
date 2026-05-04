@@ -1,12 +1,7 @@
 /*
  * =============================================================
- * HE THONG NHUNG - HỆ THỐNG BĂNG CHUYỀN PHÂN LOẠI SẢN PHẨM
- * Platform : ESP32 (FreeRTOS) — v4
- * =============================================================
- * THAY ĐỔI v4:
- *   - Manual mode: nút SERVO1/SERVO2 chỉ hoạt động khi
- *     IR Entry đang bị che (có vật trước cảm biến)
- *   - Tất cả chức năng khác giữ nguyên
+ * PROJECT: HỆ THỐNG BĂNG CHUYỀN PHÂN LOẠI SẢN PHẨM (IoT)
+ * Platform : ESP32 (FreeRTOS)
  * =============================================================
  */
 
@@ -16,6 +11,7 @@
 #include <Wire.h>
 #include <Preferences.h>
 #include <WiFi.h>
+#include <Firebase_ESP_Client.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
@@ -27,6 +23,11 @@
 #define WIFI_PASSWORD   "caotiendung"
 #define SERVER_IP       "10.187.4.16"
 #define SERVER_PORT     8888
+
+// ─── Firebase Config ─────────────────────────────────────────
+#define FIREBASE_HOST   "bangchuyen-a2516-default-rtdb.asia-southeast1.firebasedatabase.app"
+#define FIREBASE_AUTH   "IbXPvjLfRZCGljcwvJo1Cgtsqyq9rhded4JpaxvU"
+#define FB_ROOT         "/bangchuyen"
 
 // ─── GPIO ────────────────────────────────────────────────────
 #define PIN_MOTOR_PWM   25
@@ -77,6 +78,13 @@ WiFiClient tcpClient;
 SemaphoreHandle_t xTCPMutex      = NULL;
 volatile bool     tcpConnected   = false;
 
+// ─── Firebase ────────────────────────────────────────────────
+FirebaseData     fbdo;
+FirebaseAuth     fbAuth;
+FirebaseConfig   fbConfig;
+volatile bool    fbReady      = false;
+volatile bool    fbNeedWrite  = false; 
+
 // ─── FreeRTOS handles ────────────────────────────────────────
 TaskHandle_t xScanTaskHandle   = NULL;
 TaskHandle_t xGateTaskHandle   = NULL;
@@ -99,7 +107,14 @@ volatile bool isAutoMode = false;
 volatile bool motorOn    = false;
 
 int count1 = 0, count2 = 0;
-char itemName[3] = "--";
+char itemName[20] = "--";
+
+// Hàng đợi sản phẩm (Queue)
+String productQueue[4] = {"", "", "", ""};
+int queueCount = 0;
+
+// Chặn Firebase ghi đè nút vật lý trong 2 giây
+unsigned long lastLocalChange = 0; 
 
 enum WDT_TASK { WDT_SCAN, WDT_GATE, WDT_MANUAL, WDT_MOTOR, WDT_SERVO, WDT_NUM };
 volatile unsigned long wdtFeed[WDT_NUM] = {0};
@@ -145,8 +160,8 @@ void IRAM_ATTR irGateISR() {
 void vServoTask(void* pvParam) {
     int cmd;
     for (;;) {
-        if (xQueueReceive(xServoQueue, &cmd, portMAX_DELAY) == pdTRUE) {
-            wdtFeed[WDT_SERVO] = millis();
+        wdtFeed[WDT_SERVO] = millis();
+        if (xQueueReceive(xServoQueue, &cmd, pdMS_TO_TICKS(1000)) == pdTRUE) {
             switch (cmd) {
                 case 1:
                 case 3:
@@ -211,12 +226,11 @@ void vMotorTask(void* pvParam) {
 // ═════════════════════════════════════════════════════════════
 void vScanTask(void* pvParam) {
     unsigned long lastItemTime = millis();
-
     for (;;) {
         wdtFeed[WDT_SCAN] = millis();
 
-        if (!systemOn || !isAutoMode || !motorOn) {
-            lastItemTime = millis();
+        // ĐIỀU KIỆN MOTOR: Chỉ cần bật Hệ thống + Bật Động cơ là phải quay
+        if (!systemOn || !motorOn) {
             motorStop();
             vTaskDelay(pdMS_TO_TICKS(100));
             continue;
@@ -224,52 +238,34 @@ void vScanTask(void* pvParam) {
 
         motorRun(200);
 
-        if (millis() - lastItemTime > IDLE_TIMEOUT_MS) {
-            dbg("[SCAN] 30s idle -> tat motor.");
-            motorOn = false;
-            motorStop();
-            strcpy(itemName, "--");
-            preferences.putBool("motorOn", false);
-            requestLCDUpdate();
-            lastItemTime = millis();
+        // Nếu ở chế độ MANUAL thì chỉ quay motor, không quét cảm biến
+        if (!isAutoMode) {
             vTaskDelay(pdMS_TO_TICKS(100));
             continue;
         }
 
+        // --- DƯỚI ĐÂY LÀ LOGIC CHẾ ĐỘ AUTO ---
         xEventGroupClearBits(xIREvents, EVT_IR_ENTRY);
-        EventBits_t bits = xEventGroupWaitBits(
-            xIREvents, EVT_IR_ENTRY,
-            pdTRUE, pdFALSE,
-            pdMS_TO_TICKS(200)
-        );
+        EventBits_t bits = xEventGroupWaitBits(xIREvents, EVT_IR_ENTRY, pdTRUE, pdFALSE, pdMS_TO_TICKS(500));
 
         if (!(bits & EVT_IR_ENTRY)) continue;
 
         lastItemTime = millis();
-        dbg("[SCAN] IR Entry! Flush AI queue, bat dau scan...");
-
         { char dummy; while (xQueueReceive(xAIQueue, &dummy, 0) == pdTRUE) {} }
 
         motorSlow(100);
         vTaskDelay(pdMS_TO_TICKS(200));
-        // Gửi CAPTURE qua TCP thay vì Serial
         if (tcpConnected && xSemaphoreTake(xTCPMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
             tcpClient.println("CAPTURE");
             xSemaphoreGive(xTCPMutex);
-            dbg("[TCP] Gui: CAPTURE");
-        } else {
-            dbg("[TCP] Chua ket noi — bo qua CAPTURE.");
         }
 
         char aiResult = 'U';
         int pendingType = 0;
-        char name[3] = "--";
+        char name[20] = "--";
 
         if (xQueueReceive(xAIQueue, &aiResult, pdMS_TO_TICKS(6000)) == pdTRUE
             && aiResult != 'U') {
-            char log[50];
-            snprintf(log, sizeof(log), "[SCAN] AI: '%c'", aiResult);
-            dbg(log);
             switch (aiResult) {
                 case 'A': pendingType = 1; strcpy(name, "AP"); break;
                 case 'B': pendingType = 1; strcpy(name, "BA"); break;
@@ -277,33 +273,23 @@ void vScanTask(void* pvParam) {
                 case 'M': pendingType = 2; strcpy(name, "MI"); break;
                 default:  pendingType = 0; strcpy(name, "--"); break;
             }
-        } else {
-            dbg("[SCAN] AI timeout/Unknown -> khong gat.");
-            pendingType = 0;
         }
 
         strcpy(itemName, name);
-        requestLCDUpdate();
-
-        if (pendingType > 0) {
-            if (xQueueSend(xItemQueue, &pendingType, pdMS_TO_TICKS(100)) != pdTRUE) {
-                dbg("[SCAN] itemQueue day! Bo qua vat nay.");
-            } else {
-                char log[60];
-                snprintf(log, sizeof(log), "[SCAN] Push type=%d, so vat cho=%d",
-                         pendingType, (int)uxQueueMessagesWaiting(xItemQueue));
-                dbg(log);
-            }
+        if (pendingType > 0 && queueCount < 4) {
+            productQueue[queueCount++] = String(name);
+            if (xQueueSend(xItemQueue, &pendingType, pdMS_TO_TICKS(100)) != pdTRUE) {}
+            fbNeedWrite = true;
         }
 
+        requestLCDUpdate();
         motorRun(200);
-        // Chờ vật ra khỏi IR Entry hoàn toàn trước khi về IDLE
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
 
 // ═════════════════════════════════════════════════════════════
-// TASK: GATE (luồng IR Gate — AUTO mode)
+// TASK: GATE
 // ═════════════════════════════════════════════════════════════
 void vGateTask(void* pvParam) {
     unsigned long lastGateTime = 0;
@@ -326,110 +312,52 @@ void vGateTask(void* pvParam) {
 
         if (!(bits & EVT_IR_GATE)) continue;
 
-        unsigned long now = millis();
-        if (now - lastGateTime < GATE_DEBOUNCE_MS) {
-            dbg("[GATE] Nhieu IR Gate, bo qua.");
-            continue;
-        }
-        lastGateTime = now;
+        if (millis() - lastGateTime < GATE_DEBOUNCE_MS) continue;
+        lastGateTime = millis();
 
         int itemType = 0;
-        if (xQueueReceive(xItemQueue, &itemType, pdMS_TO_TICKS(50)) != pdTRUE
-            || itemType == 0) {
-            dbg("[GATE] Queue rong (unknown) -> bo qua.");
-            continue;
-        }
+        if (xQueueReceive(xItemQueue, &itemType, pdMS_TO_TICKS(50)) == pdTRUE) {
+            // Cập nhật queue hiển thị
+            for(int i=0; i<queueCount-1; i++) productQueue[i] = productQueue[i+1];
+            productQueue[--queueCount] = "";
+            fbNeedWrite = true;
 
-        char log[60];
-        snprintf(log, sizeof(log), "[GATE] Pop type=%d, con lai=%d",
-                 itemType, (int)uxQueueMessagesWaiting(xItemQueue));
-        dbg(log);
-
-        int servoCmd = (itemType == 1) ? 3 : 4;
-        if (xQueueSend(xServoQueue, &servoCmd, pdMS_TO_TICKS(3000)) == pdTRUE) {
-            if (xSemaphoreTake(xCountMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
-                if (itemType == 1) { count1++; preferences.putInt("c1", count1); }
-                else               { count2++; preferences.putInt("c2", count2); }
-                xSemaphoreGive(xCountMutex);
+            int servoCmd = (itemType == 1) ? 3 : 4;
+            if (xQueueSend(xServoQueue, &servoCmd, pdMS_TO_TICKS(3000)) == pdTRUE) {
+                if (xSemaphoreTake(xCountMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+                    if (itemType == 1) { count1++; preferences.putInt("c1", count1); }
+                    else               { count2++; preferences.putInt("c2", count2); }
+                    xSemaphoreGive(xCountMutex);
+                }
+                requestLCDUpdate();
+                xSemaphoreTake(xServoDoneSem, pdMS_TO_TICKS(3000));
             }
-            strcpy(itemName, "--");
-            requestLCDUpdate();
-            dbg(itemType == 1 ? "[GATE] Gat servo1 (trai cay)." : "[GATE] Gat servo2 (sua).");
-
-            xSemaphoreTake(xServoDoneSem, pdMS_TO_TICKS(3000));
-            xEventGroupClearBits(xIREvents, EVT_IR_GATE);
-            lastGateTime = millis();
-        } else {
-            dbg("[GATE] servoQueue day!");
         }
     }
 }
 
 // ═════════════════════════════════════════════════════════════
 // TASK: MANUAL MODE
-//
-// THAY ĐỔI v4:
-//   Nút SERVO1/SERVO2 chỉ hoạt động khi IR Entry đang bị che
-//   (digitalRead(PIN_IR_ENTRY) == LOW → có vật chắn cảm biến)
-//   IR Gate không dùng trong manual mode
 // ═════════════════════════════════════════════════════════════
 void vManualModeTask(void* pvParam) {
     bool lBtn1 = true, lBtn2 = true;
-
     for (;;) {
         wdtFeed[WDT_MANUAL] = millis();
-
-        if (!systemOn || isAutoMode) {
-            lBtn1 = lBtn2 = true;
-            vTaskDelay(pdMS_TO_TICKS(100));
-            continue;
-        }
-        if (!motorOn) {
-            motorStop();
-            vTaskDelay(pdMS_TO_TICKS(50));
-            continue;
-        }
-
-        motorRun(200);
-
-        // Đọc trạng thái IR Entry: LOW = có vật che cảm biến
+        if (!systemOn || isAutoMode) { vTaskDelay(pdMS_TO_TICKS(100)); continue; }
+        
         bool irBlocked = (digitalRead(PIN_IR_ENTRY) == LOW);
-
         bool cBtn1 = (digitalRead(BTN_SERVO1) == LOW);
         bool cBtn2 = (digitalRead(BTN_SERVO2) == LOW);
 
-        // Nút SERVO1: chỉ xử lý khi IR Entry đang bị che
         if (cBtn1 && !lBtn1 && irBlocked) {
-            if (xSemaphoreTake(xCountMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
-                count1++;
-                preferences.putInt("c1", count1);
-                xSemaphoreGive(xCountMutex);
-            }
-            int cmd = 1;
-            xQueueSend(xServoQueue, &cmd, 0);
-            requestLCDUpdate();
-            dbg("[MANUAL] Co vat + Nut SERVO1 -> Servo1 gat");
-        } else if (cBtn1 && !lBtn1 && !irBlocked) {
-            dbg("[MANUAL] Nut SERVO1 nhung khong co vat tai IR Entry, bo qua.");
+            if (xSemaphoreTake(xCountMutex, pdMS_TO_TICKS(50)) == pdTRUE) { count1++; preferences.putInt("c1", count1); xSemaphoreGive(xCountMutex); }
+            int cmd = 1; xQueueSend(xServoQueue, &cmd, 0); requestLCDUpdate(); fbNeedWrite = true;
         }
-
-        // Nút SERVO2: chỉ xử lý khi IR Entry đang bị che
         if (cBtn2 && !lBtn2 && irBlocked) {
-            if (xSemaphoreTake(xCountMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
-                count2++;
-                preferences.putInt("c2", count2);
-                xSemaphoreGive(xCountMutex);
-            }
-            int cmd = 2;
-            xQueueSend(xServoQueue, &cmd, 0);
-            requestLCDUpdate();
-            dbg("[MANUAL] Co vat + Nut SERVO2 -> Servo2 gat");
-        } else if (cBtn2 && !lBtn2 && !irBlocked) {
-            dbg("[MANUAL] Nut SERVO2 nhung khong co vat tai IR Entry, bo qua.");
+            if (xSemaphoreTake(xCountMutex, pdMS_TO_TICKS(50)) == pdTRUE) { count2++; preferences.putInt("c2", count2); xSemaphoreGive(xCountMutex); }
+            int cmd = 2; xQueueSend(xServoQueue, &cmd, 0); requestLCDUpdate(); fbNeedWrite = true;
         }
-
-        lBtn1 = cBtn1;
-        lBtn2 = cBtn2;
+        lBtn1 = cBtn1; lBtn2 = cBtn2;
         vTaskDelay(pdMS_TO_TICKS(20));
     }
 }
@@ -438,85 +366,190 @@ void vManualModeTask(void* pvParam) {
 // TASK: BUTTON
 // ═════════════════════════════════════════════════════════════
 void vButtonTask(void* pvParam) {
-    bool lMode=1, lPwr=1, lMot=1, lBtn1=1, lBtn2=1;
     unsigned long lastBtn1 = 0, lastBtn2 = 0;
+    int clickCount1 = 0, clickCount2 = 0;
 
     for (;;) {
-        bool cMode = digitalRead(BTN_MODE);
-        if (cMode == LOW && lMode == HIGH) {
-            isAutoMode = !isAutoMode;
-            preferences.putBool("auto", isAutoMode);
-            int dummy; while (xQueueReceive(xItemQueue, &dummy, 0) == pdTRUE) {}
-            dbg(isAutoMode ? "[BTN] AUTO" : "[BTN] MANUAL");
-            requestLCDUpdate();
-            vTaskDelay(pdMS_TO_TICKS(200));
-        }
-        lMode = cMode;
-
-        bool cPwr = digitalRead(BTN_POWER);
-        if (cPwr == LOW && lPwr == HIGH) {
-            systemOn = !systemOn;
-            preferences.putBool("sysOn", systemOn);
-            if (!systemOn) {
-                motorOn = false;
-                motorStop();
-                servo1.write(SERVO1_REST);
-                servo2.write(SERVO2_REST);
-                strcpy(itemName, "--");
-                int di; while (xQueueReceive(xItemQueue,  &di, 0) == pdTRUE) {}
-                int ds; while (xQueueReceive(xServoQueue, &ds, 0) == pdTRUE) {}
-                dbg("[BTN] TAT he thong.");
-            } else {
-                dbg("[BTN] BAT he thong.");
+        // --- Nút POWER ---
+        if (digitalRead(BTN_POWER) == LOW) {
+            vTaskDelay(pdMS_TO_TICKS(50));
+            if (digitalRead(BTN_POWER) == LOW) {
+                systemOn = !systemOn;
+                if (!systemOn) { motorOn = false; motorStop(); }
+                preferences.putBool("sysOn", systemOn);
+                fbNeedWrite = true;
+                lastLocalChange = millis();
+                requestLCDUpdate();
+                while (digitalRead(BTN_POWER) == LOW) vTaskDelay(pdMS_TO_TICKS(10));
             }
-            requestLCDUpdate();
-            vTaskDelay(pdMS_TO_TICKS(200));
         }
-        lPwr = cPwr;
 
         if (systemOn) {
-            bool cMot = digitalRead(BTN_MOTOR_SW);
-            if (cMot == LOW && lMot == HIGH) {
-                motorOn = !motorOn;
-                if (!motorOn) motorStop();
-                dbg(motorOn ? "[BTN] Motor ON" : "[BTN] Motor OFF");
-                requestLCDUpdate();
-                vTaskDelay(pdMS_TO_TICKS(200));
+            // --- Nút MODE ---
+            if (digitalRead(BTN_MODE) == LOW) {
+                vTaskDelay(pdMS_TO_TICKS(50));
+                if (digitalRead(BTN_MODE) == LOW) {
+                    isAutoMode = !isAutoMode;
+                    preferences.putBool("auto", isAutoMode);
+                    fbNeedWrite = true;
+                    lastLocalChange = millis();
+                    requestLCDUpdate();
+                    while (digitalRead(BTN_MODE) == LOW) vTaskDelay(pdMS_TO_TICKS(10));
+                }
             }
-            lMot = cMot;
+            // --- Nút MOTOR ---
+            if (digitalRead(BTN_MOTOR_SW) == LOW) {
+                vTaskDelay(pdMS_TO_TICKS(50));
+                if (digitalRead(BTN_MOTOR_SW) == LOW) {
+                    motorOn = !motorOn;
+                    if (!motorOn) motorStop();
+                    fbNeedWrite = true;
+                    lastLocalChange = millis();
+                    requestLCDUpdate();
+                    while (digitalRead(BTN_MOTOR_SW) == LOW) vTaskDelay(pdMS_TO_TICKS(10));
+                }
+            }
 
+            // --- XỬ LÝ HÀNG ĐỢI BẰNG NÚT SERVO (Chỉ ở chế độ AUTO) ---
             if (isAutoMode) {
-                bool c1 = digitalRead(BTN_SERVO1);
-                if (c1 == LOW && lBtn1 == HIGH) {
-                    unsigned long now = millis();
-                    if (xSemaphoreTake(xCountMutex, pdMS_TO_TICKS(20)) == pdTRUE) {
-                        if (now - lastBtn1 < 400) count1 = 0;
-                        else if (count1 > 0) count1--;
-                        preferences.putInt("c1", count1);
-                        xSemaphoreGive(xCountMutex);
-                    }
-                    lastBtn1 = now;
-                    requestLCDUpdate();
-                }
-                lBtn1 = c1;
+                // Nút Servo 1 hoặc Servo 2 đều dùng chung logic này
+                bool b1 = (digitalRead(BTN_SERVO1) == LOW);
+                bool b2 = (digitalRead(BTN_SERVO2) == LOW);
 
-                bool c2 = digitalRead(BTN_SERVO2);
-                if (c2 == LOW && lBtn2 == HIGH) {
-                    unsigned long now = millis();
-                    if (xSemaphoreTake(xCountMutex, pdMS_TO_TICKS(20)) == pdTRUE) {
-                        if (now - lastBtn2 < 400) count2 = 0;
-                        else if (count2 > 0) count2--;
-                        preferences.putInt("c2", count2);
-                        xSemaphoreGive(xCountMutex);
+                if (b1 || b2) {
+                    vTaskDelay(pdMS_TO_TICKS(50)); // Debounce
+                    if (digitalRead(BTN_SERVO1) == LOW || digitalRead(BTN_SERVO2) == LOW) {
+                        unsigned long now = millis();
+                        
+                        if (now - lastBtn1 < 500) { // DOUBLE CLICK -> CLEAR ALL
+                            queueCount = 0;
+                            int dummy; while(xQueueReceive(xItemQueue, &dummy, 0) == pdTRUE);
+                            dbg("[BTN] Xoa sach hang doi!");
+                            clickCount1 = 0; 
+                        } else { // SINGLE CLICK
+                            clickCount1 = 1;
+                        }
+                        
+                        lastBtn1 = now;
+                        // Đợi nhả nút
+                        while (digitalRead(BTN_SERVO1) == LOW || digitalRead(BTN_SERVO2) == LOW) vTaskDelay(10);
                     }
-                    lastBtn2 = now;
+                }
+
+                // Kiểm tra nếu là click đơn (sau khi chờ 500ms không thấy click thứ 2)
+                if (clickCount1 == 1 && (millis() - lastBtn1 > 500)) {
+                    if (queueCount > 0) {
+                        // Xóa phần tử đầu tiên
+                        for(int i=0; i<queueCount-1; i++) productQueue[i] = productQueue[i+1];
+                        productQueue[--queueCount] = "";
+                        
+                        // Lấy 1 vật ra khỏi queue RTOS để tránh gạt nhầm
+                        int dummy; xQueueReceive(xItemQueue, &dummy, 0);
+                        dbg("[BTN] Xoa 1 vat khoi hang doi");
+                    }
+                    clickCount1 = 0;
+                    fbNeedWrite = true;
                     requestLCDUpdate();
                 }
-                lBtn2 = c2;
+            }
+        }
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
+}
+
+// ═════════════════════════════════════════════════════════════
+// TASK: FIREBASE
+// ═════════════════════════════════════════════════════════════
+void vFirebaseTask(void* pvParam) {
+    dbg("[FB] Bat dau khoi tao...");
+    while (WiFi.status() != WL_CONNECTED) vTaskDelay(pdMS_TO_TICKS(500));
+
+    fbConfig.database_url = FIREBASE_HOST;
+    fbConfig.signer.tokens.legacy_token = FIREBASE_AUTH;
+    Firebase.begin(&fbConfig, &fbAuth);
+    Firebase.reconnectNetwork(true);
+    fbdo.setResponseSize(2048);
+    
+    // Đợi tối đa 10s cho Firebase ready, nếu không vẫn tiếp tục để không treo cả mạch
+    int retry = 0;
+    while (!Firebase.ready() && retry < 20) {
+        vTaskDelay(pdMS_TO_TICKS(500));
+        retry++;
+    }
+    fbReady = true;
+    dbg("[FB] Firebase san sang!");
+
+    unsigned long lastReadMs = 0, lastWriteMs = 0;
+    for (;;) {
+        unsigned long now = millis();
+        wdtFeed[WDT_NUM-1] = now;
+
+        if (Firebase.ready() && (now - lastReadMs >= 500)) {
+            lastReadMs = now;
+            if (Firebase.RTDB.getJSON(&fbdo, FB_ROOT "/control")) {
+                FirebaseJson json; json.setJsonData(fbdo.jsonString());
+                FirebaseJsonData data;
+
+                // Đồng bộ System, Mode, Motor (Ưu tiên App)
+                if (now - lastLocalChange > 2000) {
+                    if (json.get(data, "systemOn")) {
+                        bool val = data.boolValue;
+                        if (val != systemOn) { 
+                            systemOn = val; 
+                            if(!systemOn) { motorOn = false; motorStop(); }
+                            requestLCDUpdate(); 
+                        }
+                    }
+                    if (json.get(data, "isAutoMode")) {
+                        bool val = data.boolValue;
+                        if (val != isAutoMode) { isAutoMode = val; requestLCDUpdate(); }
+                    }
+                    if (json.get(data, "motorOn")) {
+                        bool val = data.boolValue;
+                        if (val != motorOn) { 
+                            motorOn = val; 
+                            if(!motorOn) motorStop();
+                            requestLCDUpdate(); 
+                        }
+                    }
+                }
+
+                // Xử lý Reset vật phẩm
+                if (json.get(data, "reset1") && data.boolValue == true) {
+                    count1 = 0; preferences.putInt("c1", 0);
+                    Firebase.RTDB.setBool(&fbdo, FB_ROOT "/control/reset1", false);
+                    fbNeedWrite = true; requestLCDUpdate();
+                    dbg("[FB] Reset Count 1");
+                }
+                if (json.get(data, "reset2") && data.boolValue == true) {
+                    count2 = 0; preferences.putInt("c2", 0);
+                    Firebase.RTDB.setBool(&fbdo, FB_ROOT "/control/reset2", false);
+                    fbNeedWrite = true; requestLCDUpdate();
+                    dbg("[FB] Reset Count 2");
+                }
             }
         }
 
-        vTaskDelay(pdMS_TO_TICKS(20));
+        if (Firebase.ready() && (now - lastWriteMs >= 3000 || fbNeedWrite)) {
+            lastWriteMs = now; fbNeedWrite = false;
+            
+            String queueStr = "";
+            for(int i=0; i<queueCount; i++) queueStr += productQueue[i] + (i == queueCount-1 ? "" : ", ");
+            if (queueStr == "") queueStr = "(Trong)";
+
+            FirebaseJson update;
+            update.set("status/count1", count1);
+            update.set("status/count2", count2);
+            update.set("status/lastItem", itemName);
+            update.set("status/queue", queueStr);
+            update.set("status/connected", true);
+            update.set("control/systemOn", systemOn);
+            update.set("control/motorOn", motorOn);
+            update.set("control/isAutoMode", isAutoMode);
+            
+            Firebase.RTDB.updateNode(&fbdo, FB_ROOT, &update);
+        }
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
 
@@ -545,13 +578,41 @@ void vWatchdogTask(void* pvParam) {
 // Helpers: WiFi + TCP
 // ═════════════════════════════════════════════════════════════
 void connectWiFi() {
-    dbg("[WiFi] Dang ket noi...");
     WiFi.mode(WIFI_STA);
+    WiFi.disconnect();
+    vTaskDelay(pdMS_TO_TICKS(100));
+
+    char log[60];
+    snprintf(log, sizeof(log), "[WiFi] Dang ket noi SSID: %s...", WIFI_SSID);
+    dbg(log);
+
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-    while (WiFi.status() != WL_CONNECTED) {
+    
+    int retry = 0;
+    while (WiFi.status() != WL_CONNECTED && retry < 20) {
         vTaskDelay(pdMS_TO_TICKS(500));
+        Serial.print(".");
+        retry++;
     }
-    dbg("[WiFi] Da ket noi!");
+    Serial.println();
+
+    if (WiFi.status() == WL_CONNECTED) {
+        dbg("[WiFi] Da ket noi thanh cong!");
+        dbg(WiFi.localIP().toString().c_str());
+    } else {
+        dbg("[WiFi] THAT BAI! Dang quet cac mang xung quanh de kiem tra...");
+        int n = WiFi.scanNetworks();
+        if (n == 0) {
+            dbg("[WiFi] Khong tim thay bat ky mang nao!");
+        } else {
+            dbg("[WiFi] Cac mang tim thay:");
+            for (int i = 0; i < n; ++i) {
+                char ssid[50];
+                snprintf(ssid, sizeof(ssid), "  - %s (%d dBm)", WiFi.SSID(i).c_str(), WiFi.RSSI(i));
+                dbg(ssid);
+            }
+        }
+    }
 }
 
 bool connectServer() {
@@ -685,9 +746,9 @@ void setup() {
     xTaskCreatePinnedToCore(vNetworkTask,    "Network",  4096, NULL, 2, NULL,               0); // Core 0: WiFi
     xTaskCreatePinnedToCore(vTCPRXTask,      "TCPRX",    2048, NULL, 2, NULL,               1);
     xTaskCreatePinnedToCore(vWatchdogTask,   "WDT",      2048, NULL, 3, NULL,               0);
+    xTaskCreatePinnedToCore(vFirebaseTask,   "Firebase", 8192, NULL, 1, NULL,               0); // Core 0: Firebase RTDB
 
     requestLCDUpdate();
-    dbg("=== hethognhung v5 WiFi TCP KHOI DONG ===");
 }
 
 void loop() { vTaskDelay(portMAX_DELAY); }
