@@ -749,6 +749,7 @@ void setup() {
     xTaskCreatePinnedToCore(vFirebaseTask,   "Firebase", 8192, NULL, 1, NULL,               0); // Core 0: Firebase RTDB
 
     requestLCDUpdate();
+    dbg("=== hethognhung v5 WiFi TCP + Firebase RTDB KHOI DONG ===");
 }
 
 void loop() { vTaskDelay(portMAX_DELAY); }
