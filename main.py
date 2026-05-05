@@ -64,10 +64,6 @@ def get_status() -> str:
     with _lock:
         return _status_msg
 
-def get_status() -> str:
-    with _lock:
-        return _status_msg
-
 def is_scanning() -> bool:
     with _lock:
         return _scanning
