@@ -402,7 +402,7 @@ python test_firebase.py
 
 ## 📞 Liên Hệ & Hỗ Trợ
 
-- 📧 **Email:** caotiendung111@gmail.com
+- 📧 **Email:** tiendung04dtvt@gmail.com
 - 🌐 **GitHub:** [github.com/caotiendung111](https://github.com/caotiendung111)
 - 📱 **Facebook:** [Cao Tiến Dũng](https://facebook.com)
 
@@ -417,9 +417,9 @@ Dự án này được cấp phép dưới **MIT License** - xem file [LICENSE](
 ## 🎓 Thông Tin Dự Án
 
 - **Học Phần:** Hệ Thống Nhúng (Embedded Systems)
-- **Trường:** Đại học Bách Khoa TP.HCM
-- **Năm Thực Hiện:** 2024-2025
-- **Hướng Dẫn:** ThS. Trần Minh Tuyến
+- **Trường:** Đại học Bách Khoa Đà Nẵng
+- **Năm Thực Hiện:** 2026-2027
+- **Hướng Dẫn:** TS.Văn Phú Tuấn	
 
 ---
 
