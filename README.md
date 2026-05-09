@@ -1,12 +1,12 @@
 # Hệ Thống Băng Chuyền Phân Loại Sản Phẩm Thông Minh (AI + IoT)
 
-Dự án thiết kế và xây dựng hệ thống băng chuyền phân loại sản phẩm tự động tích hợp nhận diện hình ảnh bằng trí tuệ nhân tạo (YOLOv8), đồng bộ dữ liệu Cloud qua Firebase và giám sát, điều khiển từ xa thông qua ứng dụng di động.
+Dự án thiết kế và xây dựng hệ thống băng chuyền phân loại sản phẩm tự động tích hợp nhận diện hình ảnh bằng trí tuệ nhân tạo (YOLOv8), đồng bộ dữ liệu via Cloud (Firebase) và giám sát đa nền tảng.
 
 ---
 
 ## 🌟 Tính Năng Nổi Bật
 
-- **Nhận Diện AI (Vision AI)**: Thay thế cảm biến màu sắc truyền thống bằng thuật toán **YOLOv8**, cho phép phân loại đa dạng sản phẩm (Trái cây, sữa, linh kiện...) với độ chính xác cao.
+- **Nhận Diện AI (Vision AI)**: Thay thế cảm biến màu sắc truyền thống bằng thuật toán **YOLOv8**, cho phép phân loại đa dạng sản phẩm (Trái cây, sữa, linh kiện...).
 - **Kết Nối Cloud (Firebase)**: Đồng bộ dữ liệu thời gian thực giữa phần cứng và ứng dụng di động. Thống kê số lượng sản phẩm tức thì.
 - **Giám Sát Đa Nền Tảng**: Theo dõi trạng thái hệ thống qua LCD tại chỗ, giao diện Python trên PC và **Mobile App (React Native)**.
 - **Hàng Đợi Thông Minh (Queue Management)**: Xử lý chính xác khi có nhiều vật phẩm cùng lúc trên băng chuyền nhờ cơ chế hàng đợi kỹ thuật số.
@@ -31,7 +31,7 @@ Hệ thống là sự kết hợp giữa phần cứng nhúng (ESP32), máy ch�
 | 2 | **Động cơ DC 12V** | Truyền động cho băng chuyền. | PWM, GPIO |
 | 3 | **Module L298N** | Điều khiển tốc độ và chiều quay động cơ DC. | Digital IO |
 | 4 | **Servo MG90S (x2)** | Cơ cấu gạt sản phẩm vào khay tương ứng. | PWM |
-| 5 | **Cảm biến IR (x2)** | Phát hiện vật cản tại cổng vào và cổng gạt. | Digital Input |
+| 5 | **Cảm bi���n IR (x2)** | Phát hiện vật cản tại cổng vào và cổng gạt. | Digital Input |
 | 6 | **LCD 16x2 I2C** | Hiển thị trạng thái hệ thống và số lượng sản phẩm tại chỗ. | I2C |
 | 7 | **Camera (iVCam)** | Thu thập hình ảnh sản phẩm truyền về PC để xử lý AI. | WiFi / USB |
 
@@ -73,6 +73,39 @@ Mô tả quá trình tương tác giữa Cảm biến -> ESP32 -> PC (AI Server)
 
 ---
 
+## 🚀 Cài Đặt Model và Dataset
+
+### Cài đặt Roboflow Python SDK
+
+Trước tiên, cài đặt thư viện Roboflow:
+
+```bash
+pip install roboflow
+```
+
+### Tải Dataset và Model YOLOv11
+
+Sử dụng script Python sau để tải dataset và model đã được huấn luyện:
+
+```python
+from roboflow import Roboflow
+
+rf = Roboflow(api_key="6f3bvsp9lKc6iyjJQyBU")
+project = rf.workspace("dung-tien-pyfr2").project("trainai-paupe")
+version = project.version(1)
+dataset = version.download("yolov11")
+```
+
+Script này sẽ tải dataset YOLOv11 về máy của bạn để huấn luyện hoặc sử dụng cho suy luận.
+
+### Xem Model và Metrics
+
+Bạn có thể xem chi tiết về model, performance metrics, và các phiên bản khác tại đây:
+
+🔗 **[Roboflow Project - trainai-paupe Models](https://app.roboflow.com/dung-tien-pyfr2/trainai-paupe/models)**
+
+---
+
 ## 📂 Cấu Trúc Mã Nguồn
 
 - `src/main.cpp`: Mã nguồn chính cho ESP32 sử dụng FreeRTOS.
@@ -90,4 +123,5 @@ Mô tả quá trình tương tác giữa Cảm biến -> ESP32 -> PC (AI Server)
 5. **Nguyễn Phước Duy** - Biên soạn báo cáo Chương 4, Tổng hợp báo cáo.
 
 ---
+
 *Dự án thuộc học phần Hệ Thống Nhúng - Đại học Bách Khoa - Đại học Đà Nẵng.*
