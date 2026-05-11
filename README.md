@@ -107,7 +107,7 @@ Dự án này thiết kế và xây dựng một **hệ thống băng chuyền p
 | 4 | **Servo MG90S (x2)** | Cơ cấu gạt sản phẩm vào khay tương ứng | PWM (GPIO 27, 26) | ✅ |
 | 5 | **Cảm biến IR (x2)** | Phát hiện vật cản tại cổng vào và cổng gạt | Digital Input (GPIO 34, 35) | ✅ |
 | 6 | **LCD 16x2 I2C** | Hiển thị trạng thái hệ thống và số lượng sản phẩm | I2C (Địa chỉ 0x27) | ✅ |
-| 7 | **Camera (iVCam)** | Thu thập hình ảnh sản phẩm gửi đến PC xử lý | USB/WiFi | ✅ |
+| 7 | **Camera (OV2640)** | Thu thập hình ảnh sản phẩm gửi đến PC xử lý | USB/WiFi | ✅ |
 
 ---
 
@@ -122,10 +122,10 @@ Dự án này thiết kế và xây dựng một **hệ thống băng chuyền p
 | Motor + (PWM) | 25 | Output | Điều khiển tốc độ |
 | Motor - (Chiều) | 32 | Output | Điều khiển chiều |
 | Servo 1 (Khay 1) | 27 | Output | PWM 50Hz |
-| Servo 2 (Khay 2) | 26 | Output | PWM 50Hz |
-| Cảm biến IR Cổng Vào | 34 | Input | Pull-up nội |
+| Servo 2 (Khay 2) | 32 | Output | PWM 50Hz |
+| Cảm biến IR Cổng Vào | 34 | Input | PIN 13 ENTRY IR |
 | Cảm biến IR Cổng Gạt | 35 | Input | Pull-up nội |
-| LCD SDA | 21 | I2C | I2C Data |
+| LCD SDA | 21 | I2C | I2C Data (GPIO 21, 22) |
 | LCD SCL | 22 | I2C | I2C Clock |
 
 ---
@@ -189,9 +189,22 @@ Cảm Biến → ESP32 → PC (AI Server) → Firebase → App Mobile
 
 ## 📸 Hình Ảnh Thực Tế
 
-### Mô Hình Vật Lý
+### Mô Hình Vật Lý - Hệ Thống Đầy Đủ
 
-| Mô hình tổng thể | Chi tiết cơ cấu gạt |
+![Hệ thống hoàn chỉnh - Màn hình LCD, AI Server, Camera, Động cơ, Servo, Cảm biến](docs/images/complete_system_overview.png)
+
+**Phần tử chính trong hệ thống:**
+- **OV2640 Camera + AI Camera Server** - Xử lý hình ảnh thời gian thực
+- **ESP32** - Vi điều khiển trung tâm với FreeRTOS
+- **12V DC Motor (GPIO 25, 26)** - Điều khiển báng chuyền
+- **PIN 13 ENTRY IR** - Cảm biến IR phát hiện vật phẩm tại cổng vào
+- **Servo 1 (GPIO 27 - FRUIT)** - Gạt sản phẩm vào khay trái cây (THÙNG TRÁI CÂY - Count 1)
+- **Servo 2 (GPIO 32)** - Gạt sản phẩm vào khay sữa (THÙNG SỮA - Count 2)
+- **16x2 I2C LCD (GPIO 21, 22)** - Hiển thị trạng thái hệ thống: AUTO ON, M:RUN, 1:12, 2:08, CM11
+- **PSU (Power Supply Unit)** - Nguồn điện (CỰC SẠC DỰ PHÒNG - NGUỒN CỰC BỘ)
+- **Khay phân loại** - Nơi sản phẩm được phân loại theo danh mục
+
+### Mô hình tổng thể | Chi tiết cơ cấu gạt
 |:---:|:---:|
 | ![Mô hình 1](docs/images/actual_model_1.png) | ![Mô hình 2](docs/images/actual_model_2.png) |
 
@@ -293,7 +306,8 @@ duanbangchuyen_nhom1_hethongnhung_AI_FIREBASE/
 │   ├── sequence_diagram.png
 │   ├── app_ui.png
 │   ├── actual_model_1.png
-│   └── actual_model_2.png
+│   ├── actual_model_2.png
+│   └── complete_system_overview.png
 │
 ├── README.md                       # Tài liệu dự án
 ├── LICENSE
