@@ -3,7 +3,7 @@
 <div align="center">
   <strong>Phân loại sản phẩm tự động với YOLOv8, Firebase Cloud và Mobile App</strong>
   <br/>
-  <sub>Dự án Hệ Thống Nhúng - Đại học Bách Khoa TP.HCM</sub>
+  <sub>Dự án Hệ Thống Nhúng - Đại học Bách Khoa Đà Nẵng</sub>
 </div>
 
 ---
@@ -191,7 +191,7 @@ Cảm Biến → ESP32 → PC (AI Server) → Firebase → App Mobile
 
 ### Mô Hình Vật Lý - Hệ Thống Đầy Đủ
 
-![Hệ thống hoàn chỉnh - Màn hình LCD, AI Server, Camera, Động cơ, Servo, Cảm biến](docs/images/complete_system_overview.png)
+![Hệ thống hoàn chỉnh - Màn hình LCD, AI Server, Camera, Động cơ, Servo, Cảm biến](docs/images/system_overview_labels.png)
 
 **Phần tử chính trong hệ thống:**
 - **OV2640 Camera + AI Camera Server** - Xử lý hình ảnh thời gian thực
@@ -307,7 +307,7 @@ duanbangchuyen_nhom1_hethongnhung_AI_FIREBASE/
 │   ├── app_ui.png
 │   ├── actual_model_1.png
 │   ├── actual_model_2.png
-│   └── complete_system_overview.png
+│   └── system_overview_labels.png
 │
 ├── README.md                       # Tài liệu dự án
 ├── LICENSE
@@ -402,7 +402,7 @@ python test_firebase.py
 
 ---
 
-## 👨‍💻 Thành Viên Thực Hiện
+## 👨💻 Thành Viên Thực Hiện
 
 | STT | Tên | Vai Trò | Công Việc |
 |:---:|:---|:---|:---|
