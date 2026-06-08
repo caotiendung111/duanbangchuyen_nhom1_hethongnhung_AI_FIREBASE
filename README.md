@@ -1,443 +1,225 @@
-# 🚀 Hệ Thống Băng Chuyền Phân Loại Sản Phẩm Thông Minh (AI + IoT + Cloud)
+# 🚀 Smart Conveyor Product Classification System (AI + IoT + Cloud)
 
 <div align="center">
-  <strong>Phân loại sản phẩm tự động với YOLOv8, Firebase Cloud và Mobile App</strong>
-  <br/>
-  <sub>Dự án Hệ Thống Nhúng - Đại học Bách Khoa Đà Nẵng</sub>
+
+[![C++ Version](https://img.shields.io/badge/C%2B%2B-17-blue.svg?logo=c%2B%2B&style=flat-square)](https://en.cppreference.com/)
+[![PlatformIO](https://img.shields.io/badge/PlatformIO-Firmware-orange.svg?logo=platformio&style=flat-square)](https://platformio.org/)
+[![Firebase](https://img.shields.io/badge/Firebase-RTDB-yellow.svg?logo=firebase&style=flat-square)](https://firebase.google.com/)
+[![YOLOv11](https://img.shields.io/badge/YOLOv11-Ultralytics-00A4EF?logo=ultralytics&style=flat-square)](https://docs.ultralytics.com/)
+[![React Native](https://img.shields.io/badge/React%20Native-Mobile%20App-61DAFB?logo=react&style=flat-square)](https://reactnative.dev/)
+[![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
+
+**An automated cyber-physical product sorting system combining high-speed computer vision, multi-core FreeRTOS scheduling, and real-time cloud synchronization.**
+
+[Architecture](#-system-architecture) • [Task Layout](#-freertos-task-architecture) • [Sequence](#-sequence-diagram) • [Installation](#-installation--setup) • [Limitations](#-known-limitations--future-improvements)
+
 </div>
 
 ---
 
-## 📖 Giới Thiệu Dự Án
+## 📖 Project Overview
 
-Dự án này thiết kế và xây dựng một **hệ thống băng chuyền phân loại sản phẩm tự động** tích hợp:
+This repository hosts the code for an **Automated Product Classification Conveyor Belt** system. It integrates high-speed edge computer vision inference, concurrent microcontroller task execution, and real-time mobile visualization:
 
-- 🤖 **Trí tuệ nhân tạo (YOLOv8)** - Nhận diện hình ảnh sản phẩm thời gian thực
-- ☁️ **Cloud Computing (Firebase)** - Đồng bộ dữ liệu qua Internet
-- 📱 **Ứng dụng di động (React Native)** - Giám sát và điều khiển từ xa
-- 🎛️ **Điều khiển nhúng (ESP32 + FreeRTOS)** - Xử lý đa nhiệm đáng tin cậy
-
----
-
-## ✨ Tính Năng Nổi Bật
-
-### 🔍 Nhận Diện AI (Vision AI)
-- Thay thế cảm biến màu truyền thống bằng **YOLOv8**
-- Phân loại chính xác đa dạng sản phẩm (Trái cây, sữa, linh kiện, v.v.)
-- Xử lý thời gian thực với độ chính xác cao
-
-### ☁️ Kết Nối Cloud (Firebase)
-- Đồng bộ dữ liệu thời gian thực giữa phần cứng và ứng dụng
-- Thống kê số lượng sản phẩm tức thì
-- Lưu trữ lịch sử phân loại trên Cloud
-
-### 📊 Giám Sát Đa Nền Tảng
-- **Màn hình LCD 16x2** - Hiển thị tại chỗ
-- **Giao diện Python (PC)** - Giám sát chi tiết
-- **Mobile App (React Native)** - Điều khiển từ xa
-
-### 🎯 Xử Lý Hàng Đợi Thông Minh
-- Xử lý chính xác khi có nhiều vật phẩm cùng lúc trên băng chuyền
-- Cơ chế hàng đợi kỹ thuật số (Queue Management)
-- Tránh xung đột và lỗi phân loại
-
-### 🔄 Đa Chế Độ Hoạt Động
-- **Chế độ Tự động (Auto)** - Phân loại liên tục
-- **Chế độ Thủ công (Manual)** - Điều khiển bằng tay
-- Chuyển đổi linh hoạt qua nút bấm hoặc App
-
-### ⚡ Hệ Điều Hành Thời Gian Thực (FreeRTOS)
-- Đảm bảo tính ổn định và đa nhiệm
-- Xử lý song song nhiều tác vụ trên ESP32
+* 🤖 **Edge AI Vision**: Replaces traditional static color/optical sensors with **YOLOv8/v11** classification.
+* ☁️ **Cloud Database**: Synchronizes sorting state and stats bidirectionally via **Firebase Realtime Database**.
+* 📱 **Mobile Interface**: Provides a premium **React Native (Expo)** mobile application for remote system control and real-time counts.
+* 🎛️ **RTOS Firmware**: Utilizes **ESP32 (FreeRTOS)** to schedule motor controls, sensor interrupts, and servo gates concurrently.
 
 ---
 
-## 🏗️ Kiến Trúc Hệ Thống
+## 🏗️ System Architecture
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                    Hệ Thống Tổng Thể                    │
-├─────────────────────────────────────────────────────────┤
-│                                                         │
-│  ┌──────────────┐        ┌──────────────────────┐       │
-│  │   Camera     │────────│   AI Server (PC)     │       │
-│  │   (iVCam)    │        │   YOLOv8             │       │
-│  └──────────────┘        │   Python + TCP       │       │
-│         │                └──────────┬───────────┘       │
-│         │                           │                  │
-│         └──────────────┬────────────┘                  │
-│                        │ WiFi                          │
-│          ┌─────────────▼─────────────┐                │
-│          │      ESP32 + FreeRTOS     │                │
-│          │   Control + Sensors       │                │
-│          └──────────┬────────────────┘                │
-│                     │ UART/GPIO/I2C                    │
-│       ┌─────────────┼─────────────┐                   │
-│       │             │             │                   │
-│   ┌───▼──┐  ┌──────▼───┐  ┌─────▼──┐                │
-│   │Motor │  │ Servos   │  │ Sensors│                │
-│   │      │  │ (Gạt)    │  │ (IR)   │                │
-│   └───┬──┘  └──────┬───┘  └─────┬──┘                │
-│       │             │             │                   │
-│   ┌───▼─────────────▼─────────────▼──┐               │
-│   │    Băng Chuyền + Khay Phân Loại   │               │
-│   └──────────────────────────────────┘                │
-│                                                       │
-│          ┌─────────────┬──────────┐                   │
-│          │             │          │                   │
-│      ┌───▼──┐  ┌──────▼────┐ ┌──▼────┐             │
-│      │ LCD  │  │ Firebase  │ │Mobile │             │
-│      │16x2  │  │  (Cloud)  │ │ App   │             │
-│      └──────┘  └───────────┘ └───────┘             │
-│                                                       │
-└─────────────────────────────────────────────────────┘
+The following diagram maps the integration between local physical sensors, FreeRTOS tasks, the Edge AI server, and the Firebase cloud client:
+
+```mermaid
+graph TD
+    subgraph Physical Hardware
+        cam[📷 OV2640 Camera]
+        ir1[⚡ IR Entry Sensor - Pin 13]
+        ir2[⚡ IR Gate Sensor - Pin 23]
+        motor[⚙️ DC Conveyor Motor - Pin 25]
+        s1[🦾 Servo 1 - Fruit Gate - Pin 27]
+        s2[🦾 Servo 2 - Milk Gate - Pin 32]
+        lcd[📟 16x2 I2C LCD - Pin 21/22]
+    end
+
+    subgraph ESP32 Controller (FreeRTOS Core)
+        isr[IR Interrupt Handler]
+        mq[Motor Speed Queue]
+        aq[AI Class Queue]
+        iq[Item Sorting Queue]
+        sq[Servo Commands Queue]
+    end
+
+    subgraph Edge AI Server (PC)
+        tcp[🔌 TCP Socket Server :8888]
+        yolo[🧠 YOLOv8 Inference Engine]
+    end
+
+    subgraph Cloud & Client
+        fb[(🔥 Firebase RTDB)]
+        app[📱 React Native Mobile App]
+    end
+
+    ir1 -->|FALLING Interrupt| isr
+    ir2 -->|FALLING Interrupt| isr
+    isr -->|Event Group Trigger| mq
+    mq -->|Adjust speed| motor
+    
+    cam -->|Video Frames| yolo
+    isr -->|Send CAPTURE| tcp
+    tcp -->|Run Model| yolo
+    yolo -->|Return 'A'/'B'/'O'/'M'| tcp
+    tcp -->|Send Result| aq
+    aq -->|Queue Classification| iq
+    iq -->|Triggers sorting at Gate| sq
+    sq -->|Activate Gate 1| s1
+    sq -->|Activate Gate 2| s2
+    
+    sq -->|Update LCD state| lcd
+    
+    esp_rtdb_sync[Firebase Client Task] <-->|Real-time state sync| fb
+    fb <-->|Control & Monitor| app
 ```
 
-![Kiến trúc hệ thống](docs/images/system_architecture.png)
+---
+
+## ✨ Key Features
+
+### 🔍 Edge Computer Vision
+* Replaces optical sensors with a custom YOLO model capable of classifying multiple items (Apple, Banana, Orange, Milk) with high confidence.
+* Features a temporal confirmation filter (takes 4 inference frames and accepts the majority vote) to mitigate image noise and motion blur.
+
+### ⚡ Concurrent Task Scheduling (FreeRTOS)
+* **Preemptive Scheduling**: Allocates tasks across ESP32's dual cores (Core 0 for Wi-Fi and Firebase sync; Core 1 for motor, servo control, and interrupts).
+* **Interrupt-Driven**: IR sensors use GPIO ISRs (`FALLING` edge triggers) that communicate with control threads using Event Groups and Binary Semaphores.
+* **Intelligent Sorting Queue**: Implements an in-memory queue to track physical items traveling between the entry camera and the sorting gates, preventing collisions when multiple objects are on the belt.
+
+### ☁️ Bidirectional Cloud Sync
+* Synchronizes physical button inputs (mode switches, motor stops) and remote mobile dashboard requests with sub-second latency.
+* Preserves counts locally via ESP32 `Preferences` non-volatile storage to prevent data loss on power resets.
 
 ---
 
-## 📋 Danh Mục Linh Kiện
+## 🔌 GPIO Connection Mapping
 
-| STT | Tên Linh Kiện | Chức Năng | Giao Thức | Trạng Thái |
-|:---:|:---|:---|:---:|:---:|
-| 1 | **ESP32 DevKit V1** | Vi điều khiển trung tâm, xử lý logic và kết nối WiFi | WiFi, UART, GPIO, I2C, PWM | ✅ |
-| 2 | **Động cơ DC 12V** | Truyền động cho băng chuyền | PWM, GPIO | ✅ |
-| 3 | **Module L298N** | Điều khiển tốc độ và chiều quay động cơ DC | Digital I/O | ✅ |
-| 4 | **Servo MG90S (x2)** | Cơ cấu gạt sản phẩm vào khay tương ứng | PWM (GPIO 27, 26) | ✅ |
-| 5 | **Cảm biến IR (x2)** | Phát hiện vật cản tại cổng vào và cổng gạt | Digital Input (GPIO 34, 35) | ✅ |
-| 6 | **LCD 16x2 I2C** | Hiển thị trạng thái hệ thống và số lượng sản phẩm | I2C (Địa chỉ 0x27) | ✅ |
-| 7 | **Camera (OV2640)** | Thu thập hình ảnh sản phẩm gửi đến PC xử lý | USB/WiFi | ✅ |
-
----
-
-## 🔌 Sơ Đồ Đấu Nối (Wiring Diagram)
-
-![Sơ đồ mạch](docs/images/wiring_diagram.png)
-
-### Bảng Chân Kết Nối ESP32
-
-| Chức Năng | GPIO | Loại | Ghi Chú |
+| Component | ESP32 GPIO | Mode | Protocol / Description |
 |:---|:---:|:---:|:---|
-| Motor + (PWM) | 25 | Output | Điều khiển tốc độ |
-| Motor - (Chiều) | 32 | Output | Điều khiển chiều |
-| Servo 1 (Khay 1) | 27 | Output | PWM 50Hz |
-| Servo 2 (Khay 2) | 32 | Output | PWM 50Hz |
-| Cảm biến IR Cổng Vào | 34 | Input | PIN 13 ENTRY IR |
-| Cảm biến IR Cổng Gạt | 35 | Input | Pull-up nội |
-| LCD SDA | 21 | I2C | I2C Data (GPIO 21, 22) |
-| LCD SCL | 22 | I2C | I2C Clock |
+| DC Motor PWM (Speed) | 25 | Output | LEDC PWM (5kHz) |
+| DC Motor Direction | 26 | Output | GPIO Digital |
+| Servo 1 (Fruit Gate) | 27 | Output | PWM (50Hz) |
+| Servo 2 (Milk Gate) | 32 | Output | PWM (50Hz) |
+| IR Entry Sensor | 13 | Input | ISR Pin (FALLING Interrupt) |
+| IR Gate Sensor | 23 | Input | ISR Pin (FALLING Interrupt) |
+| LCD SDA | 21 | I/O | I2C Data |
+| LCD SCL | 22 | Output | I2C Clock |
+| POWER Button | 16 | Input | Pull-up Input (Debounced) |
+| MODE Button | 15 | Input | Pull-up Input (Debounced) |
+| MOTOR Button | 17 | Input | Pull-up Input (Debounced) |
 
 ---
 
-## 🛠️ Lưu Đồ Hoạt Động
+## 🛠️ FreeRTOS Task Architecture
 
-### 1. Lưu Đồ Thuật Toán Tổng Quát
+The conveyor belt's concurrency model handles high-frequency events without blocking the main CPU execution:
 
-Mô tả luồng xử lý đa nhiệm của hệ thống dưới sự quản lý của **FreeRTOS**:
-
-![Lưu đồ thuật toán](docs/images/flowchart.png)
-
-**Các tác vụ chính (Tasks):**
-- `task_sensor()` - Đọc cảm biến IR
-- `task_ai_inference()` - Nhận diện AI từ camera
-- `task_motor_control()` - Điều khiển động cơ
-- `task_servo_control()` - Điều khiển servo gạt
-- `task_firebase_sync()` - Đồng bộ dữ liệu Cloud
-- `task_lcd_display()` - Cập nhật LCD
-
-### 2. Sơ Đồ Tuần Tự (Sequence Diagram)
-
-Mô tả quá trình tương tác giữa các thành phần:
-
-```
-Cảm Biến → ESP32 → PC (AI Server) → Firebase → App Mobile
-   │        │         │             │          │
-   └─▶ Phát hiện vật phẩm
-        │
-        └─▶ Gửi yêu cầu AI
-            │
-            └─▶ Nhận diện hình ảnh (YOLOv8)
-                │
-                └─▶ Gửi kết quả phân loại
-                    │
-                    └─▶ Kiểm soát Servo gạt
-                        │
-                        └─▶ Cập nhật Firebase
-                            │
-                            └─▶ Hiển thị trên App
+```mermaid
+flowchart TD
+    vScan["vScanTask (Core 1)"] -->|Wait for Entry Interrupt| entry_event{"Entry Triggered?"}
+    entry_event -->|Yes| slow["Slow Motor Speed"]
+    slow -->|TCP Send 'CAPTURE'| tcp_server["AI Server"]
+    tcp_server -->|Return Result| tcp_rx["vTCPRXTask (Core 1)"]
+    tcp_rx -->|Push Result| xAIQueue["[(xAIQueue)]"]
+    xAIQueue -->|Read Class| vScan
+    vScan -->|Add item to queue| xItemQueue["[(xItemQueue)]"]
+    vScan -->|Resume Motor Speed| resume["Speed up Motor"]
+    
+    vGate["vGateTask (Core 1)"] -->|Wait for Gate Interrupt| gate_event{"Gate Triggered?"}
+    gate_event -->|Yes| pop["Pop Class from xItemQueue"]
+    pop -->|Determine Gate| s_cmd["Push Command to xServoQueue"]
+    s_cmd -->|Trigger Actuator| vServo["vServoTask (Core 1)"]
+    vServo -->|Pulse Servo Gate| sort["Sort Item"]
+    sort -->|Notify Completion| vGate
+    
+    vFirebase["vFirebaseTask (Core 0)"] <-->|Sync Counters & Queues| firebase["(Firebase RTDB)"]
 ```
 
-![Sơ đồ tuần tự](docs/images/sequence_diagram.png)
+---
+
+## ⏱️ Sequence Diagram
+
+The following diagram maps the step-by-step sequence of operations during a product classification cycle:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Sensor as IR Sensors
+    participant ESP32 as ESP32 (FreeRTOS)
+    participant PC as AI Server (YOLOv8)
+    participant Firebase as Firebase RTDB
+    participant App as Mobile App
+
+    Sensor->>ESP32: Item Detected (Entry Interrupt)
+    ESP32->>ESP32: Slow down Conveyor Motor
+    ESP32->>PC: TCP Socket Send: "CAPTURE"
+    PC->>PC: Acquire Frame & Run YOLOv8 Inference
+    PC->>ESP32: TCP Reply Result (e.g. 'M' for Milk)
+    ESP32->>ESP32: Push to Classification Queue & Speed up Motor
+    Note over ESP32, Sensor: Item travels to gate
+    Sensor->>ESP32: Item Arrived at Gate (Gate Interrupt)
+    ESP32->>ESP32: Pop item class from Queue
+    ESP32->>ESP32: Pulse targeted Servo Gate (Actuator sorts item)
+    ESP32->>Firebase: Update Sorted Counts & Queue State
+    Firebase->>App: Real-time UI refresh (Stats & Logs updated)
+```
 
 ---
 
-## 📱 Giao Diện Điều Khiển Mobile
+## ⚙️ Installation & Setup
 
-Ứng dụng di động cho phép người dùng:
-
-✅ Giám sát số lượng sản phẩm phân loại theo thời gian thực  
-✅ Xem biểu đồ thống kê chi tiết  
-✅ Bật/tắt hệ thống và động cơ  
-✅ Chuyển đổi chế độ Tự động / Thủ công  
-✅ Xem lịch sử phân loại  
-✅ Cấu hình tham số hệ thống từ xa  
-
-![Giao diện App](docs/images/app_ui.png)
-
----
-
-## 📸 Hình Ảnh Thực Tế
-
-### Mô Hình Vật Lý - Hệ Thống Đầy Đủ
-
-![Hệ thống hoàn chỉnh - Màn hình LCD, AI Server, Camera, Động cơ, Servo, Cảm biến](docs/images/system_overview_labels.png)
-
-**Phần tử chính trong hệ thống:**
-- **OV2640 Camera + AI Camera Server** - Xử lý hình ảnh thời gian thực
-- **ESP32** - Vi điều khiển trung tâm với FreeRTOS
-- **12V DC Motor (GPIO 25, 26)** - Điều khiển báng chuyền
-- **PIN 13 ENTRY IR** - Cảm biến IR phát hiện vật phẩm tại cổng vào
-- **Servo 1 (GPIO 27 - FRUIT)** - Gạt sản phẩm vào khay trái cây (THÙNG TRÁI CÂY - Count 1)
-- **Servo 2 (GPIO 32)** - Gạt sản phẩm vào khay sữa (THÙNG SỮA - Count 2)
-- **16x2 I2C LCD (GPIO 21, 22)** - Hiển thị trạng thái hệ thống: AUTO ON, M:RUN, 1:12, 2:08, CM11
-- **PSU (Power Supply Unit)** - Nguồn điện (CỰC SẠC DỰ PHÒNG - NGUỒN CỰC BỘ)
-- **Khay phân loại** - Nơi sản phẩm được phân loại theo danh mục
-
-### Mô hình tổng thể | Chi tiết cơ cấu gạt
-|:---:|:---:|
-| ![Mô hình 1](docs/images/actual_model_1.png) | ![Mô hình 2](docs/images/actual_model_2.png) |
-
----
-
-## 🚀 Cài Đặt Model và Dataset
-
-### Prerequisites
-
-Đảm bảo đã cài đặt:
-- Python 3.8+ 
-- pip (Python Package Manager)
-
-### Bước 1: Cài Đặt Roboflow Python SDK
+### 1️⃣ Firmware Compilation (ESP32)
+The project is configured for **PlatformIO**. You can build it directly using the provided `Makefile`:
 
 ```bash
-pip install roboflow
+# Compile and build the binary firmware
+make build-firmware
 ```
 
-### Bước 2: Tải Dataset và Model YOLOv11
+If you are using the Arduino IDE:
+1. Copy the files in `src/` and `include/` into your Arduino sketch directory.
+2. Install dependencies: `LiquidCrystal_I2C`, `ESP32Servo`, and `Firebase_ESP_Client`.
+3. Select board `ESP32 Dev Module` and flash.
 
-Sử dụng script Python sau để tải dataset và model đã được huấn luyện:
+### 2️⃣ Python AI Server Setup
+Install dependencies and run the TCP server:
 
-```python
-from roboflow import Roboflow
-
-# Khởi tạo Roboflow với API key
-rf = Roboflow(api_key="6f3bvsp9lKc6iyjJQyBU")
-
-# Truy cập project
-project = rf.workspace("dung-tien-pyfr2").project("trainai-paupe")
-version = project.version(1)
-
-# Tải dataset YOLOv11
-dataset = version.download("yolov11")
-print(f"Dataset đã tải tại: {dataset.location}")
-```
-
-**Output mong đợi:**
-```
-Dataset đã tải tại: /path/to/trainai-paupe-1/
-├── images/
-│   ├── train/
-│   ├── val/
-│   └── test/
-├── labels/
-├── data.yaml
-└── README.md
-```
-
-### Bước 3: Xem Model và Metrics
-
-Bạn có thể xem chi tiết về model, performance metrics, và các phiên bản khác tại:
-
-🔗 **[Roboflow Project - trainai-paupe Models](https://app.roboflow.com/dung-tien-pyfr2/trainai-paupe/models)**
-
-**Thông tin Model:**
-- **Framework:** YOLOv11
-- **Độ chính xác (mAP@50):** ~92%
-- **Tốc độ suy luận:** ~15ms/image
-- **Số lớp phân loại:** 3 (Trái cây, Sữa, Linh kiện)
-
----
-
-## 📂 Cấu Trúc Mã Nguồn
-
-```
-duanbangchuyen_nhom1_hethongnhung_AI_FIREBASE/
-│
-├── src/
-│   ├── main.cpp                    # Mã chính ESP32 (FreeRTOS)
-│   ├── tasks/
-│   │   ├── task_sensor.cpp         # Đọc cảm biến IR
-│   │   ├── task_motor.cpp          # Điều khiển động cơ
-│   │   ├── task_servo.cpp          # Điều khiển servo
-│   │   └── task_firebase.cpp       # Đồng bộ Firebase
-│   └── lib/
-│       ├── firebase_config.h       # Cấu hình Firebase
-│       └── wifi_config.h           # Cấu hình WiFi
-│
-├── main.py                         # Script Python AI Server
-│   ├── yolov8_inference.py        # Nhận diện YOLOv8
-│   ├── tcp_server.py               # Server TCP nhận lệnh
-│   └── firebase_client.py          # Kết nối Firebase
-│
-├── bangchuyen-app/                 # Ứng dụng React Native
-│   ├── src/
-│   │   ├── screens/
-│   │   ├── components/
-│   │   ├── services/
-│   │   └── App.js
-│   └── package.json
-│
-├── docs/
-│   ├── images/                     # Tất cả hình ảnh
-│   ├── system_architecture.png
-│   ├── wiring_diagram.png
-│   ├── flowchart.png
-│   ├── sequence_diagram.png
-│   ├── app_ui.png
-│   ├── actual_model_1.png
-│   ├── actual_model_2.png
-│   └── system_overview_labels.png
-│
-├── README.md                       # Tài liệu dự án
-├── LICENSE
-└── .gitignore
-```
-
----
-
-## 🔧 Hướng Dẫn Cài Đặt
-
-### Cài Đặt Firmware ESP32
-
-1. **Tải Arduino IDE** hoặc **PlatformIO**
-2. **Cài đặt board ESP32:**
-   ```
-   File → Preferences → Board Manager URLs
-   → Thêm: https://dl.espressif.com/dl/package_esp32_index.json
-   ```
-3. **Mở `src/main.cpp` và upload** vào ESP32
-4. **Cấu hình WiFi & Firebase** trong `lib/firebase_config.h`
-
-### Cài Đặt Python AI Server
-
-1. **Clone repository:**
-   ```bash
-   git clone https://github.com/caotiendung111/duanbangchuyen_nhom1_hethongnhung_AI_FIREBASE.git
-   cd duanbangchuyen_nhom1_hethongnhung_AI_FIREBASE
-   ```
-
-2. **Tạo Virtual Environment:**
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # Trên Windows: venv\Scripts\activate
-   ```
-
-3. **Cài đặt thư viện:**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. **Chạy AI Server:**
-   ```bash
-   python main.py
-   ```
-
-### Cài Đặt Mobile App
-
-1. **Yêu cầu:** React Native CLI, Node.js
-2. **Cài đặt dependencies:**
-   ```bash
-   cd bangchuyen-app
-   npm install
-   ```
-3. **Chạy ứng dụng:**
-   ```bash
-   npx react-native run-android  # Hoặc run-ios
-   ```
-
----
-
-## 🧪 Kiểm Thử Hệ Thống
-
-### 1. Kiểm Thử Cảm Biến
 ```bash
-python test_sensors.py
-# Output: Sensor 1: LOW, Sensor 2: HIGH
+# Install virtual environment and packages
+make install
+
+# Start the TCP YOLO Camera server
+make run-server
 ```
 
-### 2. Kiểm Thử AI
+### 3️⃣ Mobile Application (React Native)
+Deploy the Expo-based mobile interface:
+
 ```bash
-python test_yolo.py --image test_image.jpg
-# Output: Detected: Apple (confidence: 0.95)
-```
-
-### 3. Kiểm Thử Kết Nối Firebase
-```bash
-python test_firebase.py
-# Output: Connected to Firebase ✓
+cd bangchuyen-app
+npm install
+npm run android # or npm run ios
 ```
 
 ---
 
-## 📊 Kết Quả Và Hiệu Năng
+## ⚠️ Known Limitations & Future Improvements
 
-| Chỉ Số | Giá Trị | Ghi Chú |
-|:---|:---:|:---|
-| **Độ Chính Xác Phân Loại** | 92% | Trên tập test 500 ảnh |
-| **Thời Gian Phản Ứng** | ~250ms | Từ phát hiện đến gạt |
-| **Tốc Độ Băng Chuyền** | ~30cm/s | Có thể điều chỉnh |
-| **Số Sản Phẩm Xử Lý/Phút** | ~80 | Trong điều kiện tối ưu |
-| **Độ Ổn Định (Uptime)** | >99% | Khi FreeRTOS hoạt động |
-
----
-
-## 👨💻 Thành Viên Thực Hiện
-
-| STT | Tên | Vai Trò | Công Việc |
-|:---:|:---|:---|:---|
-| 1 | **Cao Tiến Dũng** | Trưởng dự án | Lập trình ESP32 (Auto), Python (YOLOv8), Mobile App, Firebase |
-| 2 | **Đỗ Thế Hùng** | Kỹ sư | Lập trình ESP32 (Manual), Thi công lắp ráp, Lựa chọn linh kiện |
-| 3 | **Tô Văn Mạnh** | Soạn thảo | Biên soạn báo cáo Chương 1 & 2 |
-| 4 | **Trần Anh Khoa** | Soạn thảo | Biên soạn báo cáo Chương 3 |
-| 5 | **Nguyễn Phước Duy** | Soạn thảo | Biên soạn báo cáo Chương 4, Tổng hợp báo cáo |
-
----
-
-## 📞 Liên Hệ & Hỗ Trợ
-
-- 📧 **Email:** tiendung04dtvt@gmail.com
-- 🌐 **GitHub:** [github.com/caotiendung111](https://github.com/caotiendung111)
-- 📱 **Facebook:** [Cao Tiến Dũng](https://facebook.com)
-
----
-
-## 📄 Giấy Phép
-
-Dự án này được cấp phép dưới **MIT License** - xem file [LICENSE](LICENSE) để biết chi tiết.
-
----
-
-## 🎓 Thông Tin Dự Án
-
-- **Học Phần:** Hệ Thống Nhúng (Embedded Systems)
-- **Trường:** Đại học Bách Khoa Đà Nẵng
-- **Năm Thực Hiện:** 2026-2027
-- **Hướng Dẫn:** TS.Văn Phú Tuấn	
-
----
-
-<div align="center">
-  <h3>⭐ Nếu bạn thích dự án này, vui lòng đặt Star ⭐</h3>
-  <p>Cảm ơn bạn đã quan tâm!</p>
-</div>
+1. **TCP Network Blocking**: The communication between ESP32 and the Python server uses raw TCP sockets. If the Wi-Fi link experiences high latency or drops packets, the TCP read/write buffer blocks, causing items to pass the entry sensor without being scanned.
+   * *Future Path*: Migrate the socket write logic to a non-blocking asynchronous socket queue or leverage UDP with validation frames.
+2. **Database Write Quotas**: Direct, high-frequency updates to Firebase RTDB can hit rate limits or increase billing costs under heavy sorting cycles.
+   * *Future Path*: Implement local batching or delta-only transfers (sending changes only when counts increment).
+3. **Edge Processing Constraints**: Running inference on a separate PC requires active network connectivity.
+   * *Future Path*: Optimize and prune the YOLO model to compile as a TensorFlow Lite Micro or Edge Impulse library, running model inference directly on an ESP32-S3 or STM32 MCU at the edge.
+4. **Mechanical Gate Latency**: High-velocity conveyor speeds might result in products arriving at the gate before the servo completes its sweep.
+   * *Future Path*: Introduce dynamic servo speed controls modulated by conveyor speed measurements.

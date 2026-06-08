@@ -40,6 +40,7 @@ function useFirebaseValue(path, defaultVal) {
   return val;
 }
 
+// ─── Firebase Set Helper ──────────────────────────────────────
 function fbSet(path, value) {
   set(ref(db, path), value);
 }
@@ -121,9 +122,9 @@ function ModeToggle({ isAuto, onToggle, disabled }) {
     <View style={styles.modeCard}>
       <Text style={styles.controlIcon}>⚙️</Text>
       <View style={{ flex: 1, marginLeft: 14 }}>
-        <Text style={styles.controlLabel}>Chế độ hoạt động</Text>
+        <Text style={styles.controlLabel}>Operation Mode</Text>
         <Text style={styles.controlSub}>
-          {isAuto ? 'AUTO — AI tự động phân loại' : 'MANUAL — Điều khiển thủ công'}
+          {isAuto ? 'AUTO — AI automated classification active' : 'MANUAL — Manual control enabled'}
         </Text>
       </View>
       <TouchableOpacity
@@ -168,18 +169,18 @@ function StatCard({ icon, label, value, color }) {
 
 // ─── Last Item Badge ──────────────────────────────────────────
 const ITEM_CONFIG = {
-  'AP': { label: 'Táo 🍎',    color: C.red    },
-  'BA': { label: 'Chuối 🍌',  color: C.yellow },
-  'OR': { label: 'Cam 🍊',    color: C.orange },
-  'MI': { label: 'Sữa 🥛',    color: C.accent },
-  '--': { label: 'Chờ vật…',  color: C.subtext },
+  'AP': { label: 'Apple 🍎',   color: C.red    },
+  'BA': { label: 'Banana 🍌',  color: C.yellow },
+  'OR': { label: 'Orange 🍊',  color: C.orange },
+  'MI': { label: 'Milk 🥛',    color: C.accent },
+  '--': { label: 'Waiting...', color: C.subtext },
 };
 
 function LastItemBadge({ item }) {
   const cfg = ITEM_CONFIG[item] || ITEM_CONFIG['--'];
   return (
     <View style={[styles.lastItemCard, { borderColor: `${cfg.color}60`, backgroundColor: `${cfg.color}12` }]}>
-      <Text style={styles.lastItemTitle}>Sản phẩm vừa phát hiện</Text>
+      <Text style={styles.lastItemTitle}>Last Detected Product</Text>
       <Text style={[styles.lastItemValue, { color: cfg.color }]}>{cfg.label}</Text>
     </View>
   );
@@ -244,19 +245,19 @@ export default function App() {
         {/* ── Header ── */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.headerTitle}>🏭 Băng Chuyền</Text>
-            <Text style={styles.headerSub}>Hệ Thống Phân Loại Sản Phẩm</Text>
+            <Text style={styles.headerTitle}>🏭 Conveyor Belt</Text>
+            <Text style={styles.headerSub}>Product Classification Dashboard</Text>
           </View>
           <ConnectionBadge connected={connected} />
         </View>
 
-        {/* ── Section: Điều khiển ── */}
-        <Text style={styles.sectionTitle}>⚡ Điều khiển</Text>
+        {/* ── Section: Controls ── */}
+        <Text style={styles.sectionTitle}>⚡ Controls</Text>
 
         <ControlCard
           icon="🔋"
-          label="Hệ thống"
-          sublabel={systemOn ? 'Đang hoạt động' : 'Tắt nguồn'}
+          label="System Power"
+          sublabel={systemOn ? 'System Online' : 'System Offline'}
           value={systemOn}
           onToggle={toggleSystem}
           color={C.green}
@@ -270,43 +271,43 @@ export default function App() {
 
         <ControlCard
           icon="⚙️"
-          label="Động cơ băng chuyền"
-          sublabel={motorOn ? 'Đang chạy' : 'Đã dừng'}
+          label="Conveyor Motor"
+          sublabel={motorOn ? 'Motor Running' : 'Motor Stopped'}
           value={motorOn}
           onToggle={toggleMotor}
           color={C.orange}
           disabled={!systemOn}
         />
 
-        {/* ── Section: Thống kê ── */}
-        <Text style={styles.sectionTitle}>📊 Thống kê phân loại</Text>
+        {/* ── Section: Classification Statistics ── */}
+        <Text style={styles.sectionTitle}>📊 Classification Statistics</Text>
 
         <View style={styles.statsRow}>
-          <StatCard icon="🍎🍌🍊" label="Trái cây" value={count1} color={C.green} />
-          <StatCard icon="🥛"    label="Sữa"      value={count2} color={C.accent} />
+          <StatCard icon="🍎🍌🍊" label="Fruit" value={count1} color={C.green} />
+          <StatCard icon="🥛"    label="Milk"  value={count2} color={C.accent} />
         </View>
 
         <View style={styles.lastItemCard}>
-            <Text style={styles.lastItemTitle}>🕒 Hàng đợi sản phẩm (Max 4)</Text>
-            <Text style={[styles.lastItemValue, { color: C.yellow, fontSize: 24 }]}>{queue || "(Trống)"}</Text>
+            <Text style={styles.lastItemTitle}>🕒 Product Queue (Max 4)</Text>
+            <Text style={[styles.lastItemValue, { color: C.yellow, fontSize: 24 }]}>{queue || "(Empty)"}</Text>
         </View>
 
         <LastItemBadge item={lastItem} />
 
-        {/* ── Section: Reset ── */}
-        <Text style={styles.sectionTitle}>🔄 Đặt lại bộ đếm</Text>
+        {/* ── Section: Reset Counters ── */}
+        <Text style={styles.sectionTitle}>🔄 Reset Counters</Text>
         <View style={styles.resetRow}>
-          <ResetButton label="Reset Trái cây" color={C.green}  onPress={resetCount1} />
+          <ResetButton label="Reset Fruit" color={C.green}  onPress={resetCount1} />
           <View style={{ width: 10 }} />
-          <ResetButton label="Reset Sữa"      color={C.accent} onPress={resetCount2} />
+          <ResetButton label="Reset Milk"  color={C.accent} onPress={resetCount2} />
         </View>
         <TouchableOpacity onPress={resetAll} style={styles.resetAllBtn} activeOpacity={0.8}>
-          <Text style={styles.resetAllText}>🗑️ Reset tất cả</Text>
+          <Text style={styles.resetAllText}>🗑️ Reset All Counters</Text>
         </TouchableOpacity>
 
         {/* ── Footer ── */}
         <View style={styles.footer}>
-          <Text style={styles.footerText}>Hệ Thống Nhúng · ESP32 FreeRTOS v5</Text>
+          <Text style={styles.footerText}>Embedded System · ESP32 FreeRTOS v5</Text>
           <Text style={styles.footerText}>Firebase RTDB · Real-time sync</Text>
         </View>
       </ScrollView>

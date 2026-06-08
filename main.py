@@ -1,6 +1,6 @@
 """
-SERVER XỬ LÝ ẢNH (AI CAMERA) - HỆ THỐNG BĂNG CHUYỀN
-====================================================
+AI CAMERA IMAGE PROCESSING SERVER - CONVEYOR SORTING SYSTEM
+============================================================
 """
 
 import cv2
@@ -13,7 +13,7 @@ from firebase_admin import credentials, db as firebase_db
 from ultralytics import YOLO
 from collections import Counter
 
-# ─── CẤU HÌNH ────────────────────────────────────────────────
+# ─── Configuration ──────────────────────────────────────────
 TCP_HOST    = '0.0.0.0'   
 TCP_PORT    = 8888
 URL_CAMERA  = 1
@@ -22,16 +22,14 @@ NUM_FRAMES  = 4
 MIN_VALID   = 2
 CONF_THRESH = 0.65
 
-# Cấu hình Firebase
+# Firebase Database Settings
 FIREBASE_DB_URL = "https://bangchuyen-a2516-default-rtdb.asia-southeast1.firebasedatabase.app"
-# Lưu ý: Bạn cần tải file serviceAccountKey.json từ Firebase Console và để cùng thư mục
-# Nếu chưa có, mình sẽ tạm dùng Firebase Database Secret của bạn (Legacy)
 FB_AUTH_TOKEN = "IbXPvjLfRZCGljcwvJo1Cgtsqyq9rhded4JpaxvU"
 
 CLASS_MAP  = {0: 'A', 1: 'B', 2: 'O', 3: 'M'}
 CLASS_NAME = {'A': 'Apple', 'B': 'Banana', 'O': 'Orange', 'M': 'Milk', 'U': 'Unknown'}
 
-# ─── Trạng thái chia sẻ ──────────────────────────────────────
+# ─── Shared Thread States ────────────────────────────────────
 _lock         = threading.Lock()
 _cam_lock     = threading.Lock()
 _scanning     = False
@@ -39,26 +37,18 @@ _last_result  = 'U'
 _status_msg   = "READY"
 _frozen_frame = None
 
-# Khởi tạo Firebase Python
+# Initialize Firebase SDK
 try:
-    # Sử dụng Database Secret (Legacy) để đơn giản cho bạn lúc này
     options = {'databaseURL': FIREBASE_DB_URL, 'auth': {'uid': 'admin'}}
-    # Nếu bạn có file .json thì dùng credentials.Certificate("path/to/key.json")
-    # Ở đây mình giả định bạn dùng Database Secret cho nhanh
     firebase_admin.initialize_app(options=options)
-    print("[FIREBASE] Da ket noi thanh cong!")
+    print("[FIREBASE] Connection established successfully!")
 except Exception as e:
-    print(f"[FIREBASE] Loi khoi tao: {e}")
+    print(f"[FIREBASE] SDK initialization error: {e}")
 
 def set_status(msg: str):
     global _status_msg
     with _lock:
         _status_msg = msg
-    # Tạm thời tắt đồng bộ Firebase từ Python để tránh bị treo
-    # try:
-    #     firebase_db.reference('/bangchuyen/status/aiStatus').set(msg)
-    # except:
-    #     pass
 
 def get_status() -> str:
     with _lock:
@@ -68,9 +58,9 @@ def is_scanning() -> bool:
     with _lock:
         return _scanning
 
-# ─── TCPSerial Wrapper ───────────────────────────────────────
+# ─── TCP Socket Communication Wrapper ────────────────────────
 class TCPSerial:
-    """Bắt chước giao diện serial.Serial nhưng dùng TCP socket."""
+    """Mock serial.Serial interface using TCP raw sockets."""
 
     def __init__(self, client_sock: socket.socket):
         self._sock   = client_sock
@@ -129,29 +119,29 @@ class TCPSerial:
     def is_open(self) -> bool:
         return not self._closed
 
-# ─── TCP Server ──────────────────────────────────────────────
+# ─── TCP Socket Server Setup ─────────────────────────────────
 def init_tcp_server(host: str, port: int) -> socket.socket:
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     srv.bind((host, port))
     srv.listen(1)
-    print(f"[TCP] Server lang nghe tai port {port}")
-    print(f"[TCP] IP may tinh: 192.168.1.188")
+    print(f"[TCP] Server listening on port {port}")
+    print(f"[TCP] Ensure client connects to this system's Wi-Fi IP.")
     return srv
 
 def wait_for_esp32(srv: socket.socket) -> 'TCPSerial | None':
-    print("[TCP] Dang cho ESP32 ket noi WiFi...")
-    srv.settimeout(None)  # Block cho đến khi có kết nối
+    print("[TCP] Awaiting ESP32 Wi-Fi connection...")
+    srv.settimeout(None)
     try:
         cli, addr = srv.accept()
         cli.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        print(f"[TCP] ESP32 da ket noi tu {addr}")
+        print(f"[TCP] ESP32 client connected from address {addr}")
         return TCPSerial(cli)
     except Exception as e:
-        print(f"[TCP] Loi accept: {e}")
+        print(f"[TCP] Connection accept error: {e}")
         return None
 
-# ─── Thread quét sản phẩm ────────────────────────────────────
+# ─── Object Recognition Thread ──────────────────────────────
 def analyze_thread(cap: cv2.VideoCapture, model: YOLO, esp32: TCPSerial):
     global _scanning, _last_result
 
@@ -159,23 +149,24 @@ def analyze_thread(cap: cv2.VideoCapture, model: YOLO, esp32: TCPSerial):
         _scanning = True
 
     predictions = []
-    print(f"[AI] Bat dau quet {NUM_FRAMES} frames...")
+    print(f"[AI] Beginning acquisition of {NUM_FRAMES} frames...")
 
     with _cam_lock:
+        # Clear camera hardware buffer
         for _ in range(3):
             cap.grab()
 
         for i in range(NUM_FRAMES):
             ret, frame = cap.read()
             if not ret:
-                print(f"[AI] Canh bao: Khong doc duoc frame {i+1}")
+                print(f"[AI] Warning: Failed to read frame {i+1}")
                 continue
 
             frame = cv2.resize(frame, (640, 480))
             try:
                 results = model(frame, conf=CONF_THRESH, verbose=False)
             except Exception as e:
-                print(f"[AI] LOI model frame {i+1}: {e}")
+                print(f"[AI] Model inference error on frame {i+1}: {e}")
                 continue
 
             set_status(f"SCANNING {i+1}/{NUM_FRAMES}")
@@ -193,25 +184,25 @@ def analyze_thread(cap: cv2.VideoCapture, model: YOLO, esp32: TCPSerial):
 
     if len(valid) < MIN_VALID:
         result = 'U'
-        print(f"[AI] Chi co {len(valid)}/{NUM_FRAMES} frame hop le -> Unknown")
+        print(f"[AI] Only {len(valid)}/{NUM_FRAMES} valid frames -> Unknown")
     else:
         most_common_id = Counter(valid).most_common(1)[0][0]
         result = CLASS_MAP.get(most_common_id, 'U')
         confidence = valid.count(most_common_id) / len(valid) * 100
-        print(f"[AI] Ket qua: {CLASS_NAME[result]} ({confidence:.0f}% trong {len(valid)} frame)")
+        print(f"[AI] Classification result: {CLASS_NAME[result]} ({confidence:.0f}% over {len(valid)} frames)")
 
     try:
         esp32.write(result.encode())
-        print(f"[TCP] Gui ket qua: '{result}' ({CLASS_NAME[result]})")
+        print(f"[TCP] Sending result: '{result}' ({CLASS_NAME[result]})")
     except ConnectionError as e:
-        print(f"[TCP] LOI khi gui: {e}")
+        print(f"[TCP] TCP transmit error: {e}")
 
     set_status(f"SENT: {CLASS_NAME[result]}")
     with _lock:
         _last_result = result
         _scanning = False
 
-# ─── Vẽ overlay ──────────────────────────────────────────────
+# ─── OpenCV Canvas Draw Overlay ──────────────────────────────
 def draw_overlay(frame, fps: float, is_frozen: bool = False, connected: bool = True):
     status = get_status()
     with _lock:
@@ -227,7 +218,7 @@ def draw_overlay(frame, fps: float, is_frozen: bool = False, connected: bool = T
                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1)
 
     conn_color = (0, 255, 0) if connected else (0, 0, 255)
-    conn_text  = "WiFi: CONNECTED" if connected else "WiFi: WAITING..."
+    conn_text  = "Wi-Fi: CONNECTED" if connected else "Wi-Fi: AWAITING CLIENT..."
     cv2.putText(frame, conn_text, (10, 130),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, conn_color, 2)
 
@@ -241,44 +232,44 @@ def draw_overlay(frame, fps: float, is_frozen: bool = False, connected: bool = T
         cv2.rectangle(frame, (0, 0),
                       (frame.shape[1]-1, frame.shape[0]-1), (255, 0, 0), 4)
 
-# ─── Main ────────────────────────────────────────────────────
+# ─── Server Loop ─────────────────────────────────────────────
 def main():
     global _frozen_frame
 
     tcp_server = init_tcp_server(TCP_HOST, TCP_PORT)
 
-    print("[AI] Dang tai model YOLO...")
+    print("[AI] Loading YOLO model...")
     try:
         model = YOLO(MODEL_PATH)
-        print("[AI] Model san sang.")
+        print("[AI] YOLO model loaded successfully.")
     except Exception as e:
-        print(f"[FATAL] Khong tai duoc model: {e}")
+        print(f"[FATAL] Failed to load model: {e}")
         tcp_server.close()
         return
 
     cap = cv2.VideoCapture(URL_CAMERA)
     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
     if not cap.isOpened():
-        print("[FATAL] Khong mo duoc camera!")
+        print("[FATAL] Failed to open camera device!")
         tcp_server.close()
         return
 
     esp32 = wait_for_esp32(tcp_server)
     if esp32 is None:
-        print("[FATAL] Khong ket noi duoc ESP32. Thoat.")
+        print("[FATAL] Failed to connect to ESP32. Exiting.")
         cap.release()
         tcp_server.close()
         return
 
-    print("=== HE THONG SAN SANG === (Nhan 'q' de thoat)")
-    set_status("READY - CHO ESP32...")
+    print("=== SYSTEM ACTIVE === (Press 'q' to quit)")
+    set_status("READY - AWAITING CLIENT...")
 
     prev_time  = time.time()
     scan_thread = None
 
     try:
         while True:
-            # Lấy frame live hoặc frozen khi AI đang scan
+            # Capture live frames if camera lock is available
             if _cam_lock.acquire(blocking=False):
                 ret, frame = cap.read()
                 _cam_lock.release()
@@ -287,7 +278,7 @@ def main():
                     _frozen_frame = frame.copy()
                     is_frozen = False
                 else:
-                    print("[CAMERA] Mat ket noi! Thu lai...")
+                    print("[CAMERA] Stream link lost! Retrying...")
                     time.sleep(0.5)
                     continue
             else:
@@ -312,26 +303,26 @@ def main():
                 display_frame = frame.copy()
 
             draw_overlay(display_frame, fps, is_frozen, connected=esp32.is_open)
-            cv2.imshow("hethognhung AI Camera", display_frame)
+            cv2.imshow("Smart Conveyor AI Camera", display_frame)
 
-            # Xử lý mất kết nối ESP32
+            # Reconnection logic on client socket disconnection
             if not esp32.is_open:
-                print("[TCP] ESP32 mat ket noi! Dang cho ket noi lai...")
-                set_status("WAITING ESP32 WiFi...")
+                print("[TCP] ESP32 disconnected! Re-establishing connection...")
+                set_status("AWAITING CLIENT Wi-Fi...")
                 esp32.close()
                 esp32 = wait_for_esp32(tcp_server)
                 if esp32 is None:
-                    print("[FATAL] Khong ket noi lai duoc. Thoat.")
+                    print("[FATAL] Failed to reconnect. Exiting.")
                     break
-                set_status("READY - CHO ESP32...")
+                set_status("READY - AWAITING CLIENT...")
                 continue
 
-            # Đọc lệnh CAPTURE từ ESP32 qua TCP
+            # Read capture triggers from ESP32 TCP socket
             try:
                 if esp32.in_waiting > 0:
                     line = esp32.readline().decode('utf-8', errors='ignore').strip()
                     if line == "CAPTURE":
-                        print(f"\n[TCP] Nhan CAPTURE!")
+                        print(f"\n[TCP] CAPTURE command received!")
                         if not is_scanning():
                             set_status(f"SCANNING 0/{NUM_FRAMES}")
                             scan_thread = threading.Thread(
@@ -341,15 +332,15 @@ def main():
                             )
                             scan_thread.start()
                         else:
-                            print("[AI] Dang scan, bo qua CAPTURE nay.")
+                            print("[AI] Scanning in progress, ignoring duplicate CAPTURE request.")
             except Exception as e:
-                print(f"[TCP] Loi nhan du lieu: {e}")
+                print(f"[TCP] TCP receive error: {e}")
 
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
     except KeyboardInterrupt:
-        print("\n[INFO] Nhan Ctrl+C, dang tat...")
+        print("\n[INFO] Ctrl+C interrupt, shutting down...")
 
     finally:
         if scan_thread and scan_thread.is_alive():
@@ -359,7 +350,7 @@ def main():
         if esp32:
             esp32.close()
         tcp_server.close()
-        print("[INFO] He thong da tat.")
+        print("[INFO] Shutdown complete.")
 
 if __name__ == "__main__":
     main()
